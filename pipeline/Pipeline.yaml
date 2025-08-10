@@ -1,0 +1,975 @@
+pool:
+  name: eheu2pd1epvmss
+
+trigger:
+  branches:
+    exclude:
+      - '*'
+
+resources:
+  repositories:
+    # must have for adding cloud cluster topics/groups
+    - repository: ucxAdoTemplates
+      type: git
+      name: 'UCX/ucx-ado-templates'
+
+variables:
+  buildConfiguration: "Release"
+  uiWorkingDir:       "Ucx.MemberHistory.Ui"
+  apiContainerName: 'ucx-member-history-service-api'
+  apiDockerFileLocation: './Ucx.MemberHistory.Service/UCX.MemberHistoryService.Api/Dockerfile'
+  observerContainerName: 'ucx-member-history-service-observer'
+  observerDockerFileLocation: './Ucx.MemberHistory.Service/UCX.MemberHistoryService.Observer/Dockerfile'
+  replayObserverContainerName: 'ucx-member-history-service-observer-replay'
+  replayObserverDockerFileLocation: './Ucx.MemberHistory.Service/UCX.MemberHistoryService.Observer.Replay/Dockerfile'
+  dockerRegistry: 'globalcrep-acr'
+  dockerRegistryName: 'globalcrep'
+  dockerRegistryRsg: 'global_rsg_ep'
+  dockerRegistrySubscription: 'a0c6645e-c3da-4a78-9ef6-04ab6aad45ff'
+  dockerRegistryUrl: 'globalcrep.azurecr.io'
+  terraformWorkingDirectory: './Ucx.MemberHistory.Service/Infrastructure'
+  dotnetVersion: '7.x'
+  nugetConfigPath: './Ucx.MemberHistory.Service/NuGet.Config'
+  terraformStateFileName: 'ucx-member-history-service.tfstate'
+  solutionPath: './Ucx.MemberHistory.sln'
+  testPath: './Ucx.MemberHistory.sln --filter FullyQualifiedName!~Ucx.MemberHistory.Tests.Tests'
+  stateContainerName: 'terraform-member-history-service-container'
+  testProjectPath: './Ucx.MemberHistory.AutomationTests/Ucx.MemberHistory.Tests/Ucx.MemberHistory.Tests.csproj'
+  nugetConfigPathForAutomationTests: './Ucx.MemberHistory.AutomationTests/Nuget.config'
+
+stages:
+  - stage: 'AutomationTests'
+    jobs:
+      - job: Automation
+        displayName: 'Run Automation'
+        pool:
+          name: Automation_Win_NonProd
+          demands:
+            - msbuild
+            - visualstudio
+        steps:
+          - task: UseDotNet@2
+            displayName: 'Install .NET 7 SDK'
+            inputs:
+              packageType: 'sdk'
+              version: '7.x'
+              performMultiLevelLookup: true
+          - task: DotNetCoreCLI@2
+            displayName: 'Dotnet: Restore'
+            inputs:
+              command: 'restore'
+              feedsToUse: 'config'
+              nugetConfigPath: './Ucx.MemberHistory.Service/NuGet.Config'
+              externalFeedCredentials: 'epplatform'
+              noCache: true
+              restoreDirectory: '$(System.DefaultWorkingDirectory)/.NugetPackages'
+          - task: DotNetCoreCLI@2
+            displayName: 'UI Automation: Test Validation'
+            inputs:
+              command: 'test'
+              proejcts: '**/*Test/*.csproj'
+              arguments: '--no-restore'
+  - stage: 'Sonarqube'
+    dependsOn: []
+    jobs:
+      - job: SonarQubeAnalysis
+        displayName: 'Running: SonarQube Analysis'
+        pool:
+          name: 'eheu2pd1epvmss'
+        steps:
+          - task: SonarQubePrepare@5
+            continueOnError: true
+            inputs:
+              SonarQube: 'Cigna SonarQube Prod-UCX'
+              scannerMode: 'MSBuild'
+              projectKey: 'UCX.MemberHistoryService'
+              projectName: 'UCX.MemberHistoryService'
+              extraProperties: |
+                sonar.cs.opencover.reportsPaths=$(Build.SourcesDirectory)\coverage.opencover.xml
+                sonar.cs.xunit.reportsPaths=$(Build.SourcesDirectory)**/*.trx
+                sonar.exclusions=**/*.yml, **/*.yaml
+                sonar.coverage.exclusions="**Tests*.cs"
+          - task: DotNetCoreCLI@2
+            displayName: dotnet restore
+            inputs:
+              command: 'restore'
+              feedsToUse: 'config'
+              nugetConfigPath: './Ucx.MemberHistory.Service/NuGet.Config'
+              externalFeedCredentials: 'epplatform'
+          - task: DotNetCoreCLI@2
+            displayName: 'Dotnet Build'
+            inputs:
+              projects: '**/*.csproj'
+              arguments: '-c Release -o $(Build.ArtifactStagingDirectory)'
+          - task: DotNetCoreCLI@2
+            displayName: 'Dotnet Test'
+            enabled: true
+            inputs:
+              command: 'test'
+              projects: '**/*Test/*.csproj'
+              arguments: '--configuration $(buildConfiguration) --logger trx --results-directory $(Build.SourcesDirectory)\ /p:CollectCoverage=true /p:CoverletOutputFormat=opencover /p:CoverletOutput=$(Build.SourcesDirectory)\'
+              publishTestResults: false
+          - task: PublishTestResults@2
+            displayName: 'Publish Test Results'
+            continueOnError: true
+            inputs:
+              testResultsFormat: VSTest
+              testResultsFiles: '**/*.trx'
+              searchFolder: '$(Build.SourcesDirectory)'
+              failTaskOnFailedTests: true
+          - task: reportgenerator@5
+            displayName: 'Generating Report'
+            inputs:
+              reports: 'coverage.opencover.xml'
+              targetdir: 'coveragereport'
+              sourcedirs: '$(Build.SourcesDirectory)'
+            continueOnError: true
+          - task: PublishCodeCoverageResults@1
+            displayName: 'Publish Code Coverage Results'
+            inputs:
+             codeCoverageTool: Cobertura
+             summaryFileLocation: '$(Build.SourcesDirectory)/coveragereport/Cobertura.xml'
+             reportDirectory: '$(Build.SourcesDirectory)/coveragereport'
+            env:
+             DISABLE_COVERAGE_AUTOGENERATE: 'true'
+          - task: SonarQubeAnalyze@5
+            continueOnError: true
+          - task: SonarQubePublish@5
+            inputs:
+              pollingTimeoutSec: '300'
+              
+  - stage: 'SonarQubeUI'
+    dependsOn: [ ]
+    jobs: 
+      - job: SonarQubeUI
+        pool:
+          name: 'eheu2pd1epvmss'
+        steps:
+          - task: Npm@1
+            displayName: 'npm install'
+            inputs:
+              command: 'install'
+              workingDir: $(uiWorkingDir)
+          - task: Npm@1
+            displayName: 'npm run test'
+            inputs:
+              command: 'custom'
+              customCommand: 'run test --coverage'
+              workingDir: $(uiWorkingDir)
+          - task: PublishCodeCoverageResults@1
+            inputs:
+              codeCoverageTool: Cobertura
+              summaryFileLocation: $(uiWorkingDir)/coverage/lcov.info
+              reportDirectory: $(uiWorkingDir)/coverage
+          - task: SonarQubePrepare@5
+            continueOnError: true
+            inputs:
+              SonarQube: 'Cigna SonarQube Prod-UCX'
+              scannerMode: 'CLI'
+              configMode: 'manual'
+              cliprojectKey: 'UCX.MemberHistoryMicroUI'
+              cliprojectName: 'UCX.MemberHistoryMicroUI'
+              extraProperties: |
+                sonar.sources=$(uiWorkingDir)/src
+                sonar.tests=$(uiWorkingDir)/src
+                sonar.exclusions=$(uiWorkingDir)/src/index.tsx,$(uiWorkingDir)/src/**/*.ts
+                sonar.test.inclusions=$(uiWorkingDir)/src/**/*.test.ts,$(uiWorkingDir)/src/**/*.test.tsx,$(uiWorkingDir)/src/__test__/**/*.test.ts,src/**/*.spec.ts
+                sonar.coverage.exclusions=$(uiWorkingDir)/src/index.tsx,$(uiWorkingDir)/src/**/*.ts
+                sonar.javascript.lcov.reportPaths=$(uiWorkingDir)/coverage/lcov.info
+                sonar.testExecutionReportPaths=$(uiWorkingDir)/coverage/test-report.xml
+          - task: SonarQubeAnalyze@5
+            continueOnError: true
+          - task: SonarQubePublish@5
+            inputs:
+              pollingTimeoutSec: "300"
+  - stage: 'CheckMarx'
+    dependsOn: []
+    jobs:
+      - job: CheckMarxService
+        displayName: 'Running: Checkmarx Analysis for Service'
+        pool:
+          name: 'eheu2pd1epvmss'
+        steps:
+          - template: checkmarx.yml
+            parameters:
+              projectName: 'UCX.MemberHistoryService'
+              serviceConnection: 'Everest-Checkmarx-SAST-Service-Connection'
+              fullTeamName: 'CxServer/Cigna/Everest'
+              projectRepoUrl: 'https://eviCoreDev@dev.azure.com/eviCoreDev/UCX/_git/Ucx.MemberHistory'
+              excludedFolder: 'Ucx.MemberHistory.Ui'
+              pointOfContactEmail: 'pravin.phulari@evicore.com'
+              commentsScriptFilePath: './Ucx.MemberHistory.Service/Pipelines/CheckmarxPRComments.ps1'
+      - job: CheckMarxUi
+        dependsOn: []
+        displayName: 'Running: Checkmarx Analysis for UI'
+        pool:
+          name: 'eheu2pd1epvmss'
+        steps:
+          - template: checkmarx.yml
+            parameters:
+              projectName: 'UCX.MemberHistoryMicroUI'
+              serviceConnection: 'Everest-Checkmarx-SAST-Service-Connection'
+              fullTeamName: 'CxServer/Cigna/Everest'
+              projectRepoUrl: 'https://eviCoreDev@dev.azure.com/eviCoreDev/UCX/_git/Ucx.MemberHistory'
+              excludedFolder: 'Ucx.MemberHistory.Service'
+              pointOfContactEmail: 'pravin.phulari@evicore.com'
+              commentsScriptFilePath: './Ucx.MemberHistory.Service/Pipelines/CheckmarxPRComments.ps1'
+        workspace:
+          clean: all
+
+  - stage: Build
+    jobs:
+      - template: dotnet/build-and-test.yaml@ucxAdoTemplates
+        parameters:
+          dotnetVersion: $(dotnetVersion)
+          nugetConfigPath: $(nugetConfigPath)
+          solutionPath: $(solutionPath)
+          testPath: $(testPath)
+
+  - stage: DV1_Infrastructure_Plan
+    jobs:
+      - job: DV1_Infrastructure
+        displayName: "Review DV1 Infrastructure Changes"
+        condition: or(eq(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.Reason'], 'Manual'))
+        steps:
+          - checkout: self
+          - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@0
+            displayName: "Install Terraform"
+            inputs:
+              terraformVersion: "latest"
+          - powershell: |
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/Terraform%20Modules/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/Terraform%20Modules'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/Terraform%20Modules/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/Terraform%2520Modules'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/eviCore%20Platform/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/eviCore%20Platform'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/eviCore%20Platform/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/eviCore%2520Platform'
+                  git config --global -l
+            displayName: Git url rewrite
+          - task: TerraformTaskV2@2
+            displayName: "Terraform init"
+            inputs:
+              provider: "azurerm"
+              command: "init"
+              workingDirectory: $(terraformWorkingDirectory)
+              backendServiceArm: 'sp_dv1_rsg_eu2_ucx'
+              backendAzureRmResourceGroupName: 'dv1_rsg_eu2_ucx'
+              backendAzureRmStorageAccountName: 'dv1eu2ucxtfstate'
+              backendAzureRmContainerName: $(stateContainerName)
+              backendAzureRmKey:  $(terraformStateFileName)
+          - task: TerraformTaskV2@2
+            displayName: "Terraform plan"
+            name: 'TerraformA'
+            inputs:
+              provider: "azurerm"
+              command: "plan"
+              workingDirectory: $(terraformWorkingDirectory)
+              commandOptions: '-var-file Environments/dv1.tfvars -var=resource_group_name="dv1_rsg_eu2_ucx" -var=container_image_version="$(Build.BuildNumber)" -var=observer_container_image_name="$(observerContainerName)" -var=api_container_image_name="$(apiContainerName)" -var=docker_registry_name="$(dockerRegistryName)" -var=docker_registry="$(dockerRegistryUrl)" -var=docker_registry_rsg=$(dockerRegistryRsg) -var=docker_registry_sub=$(dockerRegistrySubscription) -out=tfplan.out'
+              environmentServiceNameAzureRM: 'sp_dv1_rsg_eu2_ucx'
+
+  - stage: IN1_Infrastructure_Plan
+    jobs:
+      - job: IN1_Infrastructure
+        displayName: "Review IN1 Infrastructure Changes"
+        condition: or(eq(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.Reason'], 'Manual'))
+        steps:
+          - checkout: self
+          - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@0
+            displayName: "Install Terraform"
+            inputs:
+              terraformVersion: "latest"
+          - powershell: |
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/Terraform%20Modules/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/Terraform%20Modules'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/Terraform%20Modules/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/Terraform%2520Modules'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/eviCore%20Platform/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/eviCore%20Platform'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/eviCore%20Platform/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/eviCore%2520Platform'
+                  git config --global -l
+            displayName: Git url rewrite
+          - task: TerraformTaskV2@2
+            displayName: "Terraform init"
+            inputs:
+              provider: "azurerm"
+              command: "init"
+              workingDirectory: $(terraformWorkingDirectory)
+              backendServiceArm: 'sp_in1_rsg_eu2_ucx'
+              backendAzureRmResourceGroupName: 'in1_rsg_eu2_ucx'
+              backendAzureRmStorageAccountName: 'in1eu2ucxtfstate'
+              backendAzureRmContainerName:  $(stateContainerName)
+              backendAzureRmKey: $(terraformStateFileName)
+          - task: TerraformTaskV2@2
+            displayName: "Terraform plan"
+            name: 'TerraformA'
+            inputs:
+              provider: "azurerm"
+              command: "plan"
+              workingDirectory: $(terraformWorkingDirectory)
+              commandOptions: '-var-file Environments/in1.tfvars -var=resource_group_name="in1_rsg_eu2_ucx" -var=container_image_version="$(Build.BuildNumber)" -var=observer_container_image_name="$(observerContainerName)" -var=api_container_image_name="$(apiContainerName)" -var=docker_registry_name="$(dockerRegistryName)" -var=docker_registry="$(dockerRegistryUrl)" -var=docker_registry_rsg=$(dockerRegistryRsg) -var=docker_registry_sub=$(dockerRegistrySubscription) -out=tfplan.out'
+              environmentServiceNameAzureRM: 'sp_in1_rsg_eu2_ucx'
+
+
+
+Thanks and Regards
+Siraj
+
+From: R, Sirajudeen (CTR) 
+Sent: Friday, August 16, 2024 5:20 PM
+To: R, Sirajudeen (CTR) <sirajudeen.r@evicore.com>
+Subject: pipel
+
+pr-pipeline.yml
+trigger: none # Disable CI triggers.
+
+pool:
+  name: 'ubuntu-latest-nonprod'
+  vmImage: 'ubuntu-latest'
+
+resources:
+  repositories:
+    - repository: ucxAdoTemplates
+      type: git
+      name: 'UCX/ucx-ado-templates'
+variables:
+  observerContainerName: 'ucx-aclservice-erss-observer'
+  apiContainerName: 'ucx-aclservice-erss-api'
+  dockerRegistryName: 'globalcrep'
+  dockerRegistryRsg: 'global_rsg_ep'
+  dockerRegistrySubscription: 'a0c6645e-c3da-4a78-9ef6-04ab6aad45ff'
+  dockerRegistryUrl: 'globalcrep.azurecr.io'
+
+stages:
+  - stage:
+    jobs:
+      - template: dotnet/pull-request.yaml@ucxAdoTemplates
+        parameters:
+          dotnetVersion: '7.x'
+          nugetConfigPath: './NuGet.Config'
+          solutionPath: './Ucx.AclService.Erss.sln'
+          testPath: './Ucx.AclService.Erss.Tests/Ucx.AclService.Erss.Tests.csproj'
+          SonarQubeProjectKey: 'Ucx.AclService.Erss'
+          SonarQubeProjectName: 'Ucx.AclService.Erss'
+          RunSonarQubeAnalysis: true
+          CheckmarxProjectName: 'Ucx.AclService.Erss'
+          CheckmarxServiceConnection: 'UCX-Checkmarx-SAST-Service-Connection'
+          CheckmarxFullTeamName: 'CxServer/Cigna/UCX'
+          CheckmarxProjectRepoUrl: 'https://eviCoreDev@dev.azure.com/eviCoreDev/UCX/_git/Ucx.Ucx.AclService.Erss'
+          CheckmarxPointOfContactEmail: 'krista.guida@evicore.com'
+          RunCheckMarxAnalysis: true
+  - stage: DV1_Infrastructure_Plan
+    jobs:
+      - job: DV1_Infrastructure
+        displayName: "Review DV1 Infrastructure Changes"
+        condition: or(eq(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.Reason'], 'Manual'))
+        steps:
+          - checkout: self
+          - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@0
+            displayName: "Install Terraform"
+            inputs:
+              terraformVersion: "latest"
+          - powershell: |
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/Terraform%20Modules/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/Terraform%20Modules'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/Terraform%20Modules/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/Terraform%2520Modules'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/eviCore%20Platform/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/eviCore%20Platform'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/eviCore%20Platform/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/eviCore%2520Platform'
+                  git config --global -l
+            displayName: Git url rewrite
+          - task: TerraformTaskV2@2
+            displayName: "Terraform init"
+            inputs:
+              provider: "azurerm"
+              command: "init"
+              workingDirectory: 'Infrastructure'
+              backendServiceArm: 'sp_dv1_rsg_eu2_ucx'
+              backendAzureRmResourceGroupName: 'dv1_rsg_eu2_ucx'
+              backendAzureRmStorageAccountName: 'dv1eu2ucxtfstate'
+              backendAzureRmContainerName: 'terraform-aclserviceerss-container'
+              backendAzureRmKey: 'ucx-acl-service-erss.tfstate'
+          - task: TerraformTaskV2@2
+            displayName: "Terraform plan"
+            name: 'TerraformA'
+            inputs:
+              provider: "azurerm"
+              command: "plan"
+              workingDirectory: 'Infrastructure'
+              commandOptions: '-var-file Environments/dv1.tfvars -var=resource_group_name="dv1_rsg_eu2_ucx" -var=container_image_version="$(Build.BuildNumber)" -var=observer_container_image_name="$(observerContainerName)" -var=api_container_image_name="$(apiContainerName)" -var=docker_registry_name="$(dockerRegistryName)" -var=docker_registry="$(dockerRegistryUrl)" -var=docker_registry_rsg=$(dockerRegistryRsg) -var=docker_registry_sub=$(dockerRegistrySubscription) -out=tfplan.out'
+              environmentServiceNameAzureRM: 'sp_dv1_rsg_eu2_ucx'
+
+  - stage: IN1_Infrastructure_Plan
+    jobs:
+      - job: IN1_Infrastructure
+        displayName: "Review IN1 Infrastructure Changes"
+        condition: or(eq(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.Reason'], 'Manual'))
+        steps:
+          - checkout: self
+          - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@0
+            displayName: "Install Terraform"
+            inputs:
+              terraformVersion: "latest"
+          - powershell: |
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/Terraform%20Modules/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/Terraform%20Modules'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/Terraform%20Modules/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/Terraform%2520Modules'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/eviCore%20Platform/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/eviCore%20Platform'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/eviCore%20Platform/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/eviCore%2520Platform'
+                  git config --global -l
+            displayName: Git url rewrite
+          - task: TerraformTaskV2@2
+            displayName: "Terraform init"
+            inputs:
+              provider: "azurerm"
+              command: "init"
+              workingDirectory: 'Infrastructure'
+              backendServiceArm: 'sp_in1_rsg_eu2_ucx'
+              backendAzureRmResourceGroupName: 'in1_rsg_eu2_ucx'
+              backendAzureRmStorageAccountName: 'in1eu2ucxtfstate'
+              backendAzureRmContainerName: 'terraform-aclserviceerss-container'
+              backendAzureRmKey: 'ucx-acl-service-erss.tfstate'
+          - task: TerraformTaskV2@2
+            displayName: "Terraform plan"
+            name: 'TerraformA'
+            inputs:
+              provider: "azurerm"
+              command: "plan"
+              workingDirectory: 'Infrastructure'
+              commandOptions: '-var-file Environments/in1.tfvars -var=resource_group_name="in1_rsg_eu2_ucx" -var=container_image_version="$(Build.BuildNumber)" -var=observer_container_image_name="$(observerContainerName)" -var=api_container_image_name="$(apiContainerName)" -var=docker_registry_name="$(dockerRegistryName)" -var=docker_registry="$(dockerRegistryUrl)" -var=docker_registry_rsg=$(dockerRegistryRsg) -var=docker_registry_sub=$(dockerRegistrySubscription) -out=tfplan.out'
+              environmentServiceNameAzureRM: 'sp_in1_rsg_eu2_ucx'
+
+
+azure-pipelines.yml
+pool:
+  name: eheu2pd1epvmss
+
+trigger:
+  branches:
+    include:
+      - main
+
+resources:
+  repositories:
+    # must have for adding cloud cluster topics/groups
+    - repository: ucxAdoTemplates
+      type: git
+      name: 'UCX/ucx-ado-templates'
+
+variables:
+  observerImageName: 'ucx-aclservice-erss-observer'
+  apiImageName: 'ucx-aclservice-erss-api'
+  dockerRegistry: 'globalcrep-acr'
+  dockerRegistryName: 'globalcrep'
+  dockerRegistryRsg: 'global_rsg_ep'
+  dockerRegistrySubscription: 'a0c6645e-c3da-4a78-9ef6-04ab6aad45ff'
+  dockerRegistryUrl: 'globalcrep.azurecr.io'
+  terraformWorkingDirectory: 'Infrastructure'
+  dotnetVersion: '7.x'
+  dockerFileLocation: './Ucx.AclService.Erss.App/Dockerfile'
+  apiDockerFileLocation: './Ucx.AclService.Erss.Api/Dockerfile'
+  nugetConfigPath: './NuGet.Config'
+  terraformStateFileName: 'ucx-acl-service-erss.tfstate'
+  solutionPath: './Ucx.AclService.Erss.sln'
+  stateContainerName: 'terraform-aclserviceerss-container'
+  assetOwner: 'Gravity'
+  businessOwner: 'Esther igbinovia'
+  appName: 'ACL Service ERSS'
+  itSponsor: 'Rajesh Shardha'
+  unitTestProjectPath: './Ucx.AclService.Erss.Tests/Ucx.AclService.Erss.Tests.csproj'
+
+stages:
+  - stage: Build
+    pool:
+      vmImage: "ubuntu-latest"
+    jobs:
+      - template: dotnet/build-and-test.yaml@ucxAdoTemplates
+        parameters:
+          dotnetVersion: $(dotnetVersion)
+          nugetConfigPath: $(nugetConfigPath)
+          solutionPath: $(solutionPath)
+          testPath: $(unitTestProjectPath)
+  - stage: Docker
+    displayName: 'Build and publish docker image'
+    dependsOn: Build
+    condition: succeeded()
+    pool:
+      name: "ubuntu-latest"
+    jobs:
+      - template: docker/docker-build-push.yaml@ucxAdoTemplates
+        parameters:
+          dockerRegistry: $(dockerRegistry)
+          imageName: $(observerImageName)
+          dotnetVersion: $(dotnetVersion)
+          dockerFileLocation: $(dockerFileLocation)
+          nugetConfigPath: $(nugetConfigPath)
+          jobName: 'Observer_Docker'
+      - template: docker/docker-build-push.yaml@ucxAdoTemplates
+        parameters:
+          dockerRegistry: $(dockerRegistry)
+          imageName: $(apiImageName)
+          dotnetVersion: $(dotnetVersion)
+          dockerFileLocation: $(apiDockerFileLocation)
+          nugetConfigPath: $(nugetConfigPath)
+          jobName: "Api_Docker"
+
+  - stage: DV1
+    displayName: "Deploy DV1"
+    dependsOn: Docker
+    pool:
+      name: "ubuntu-latest"
+    jobs:
+      - template: docker/azure-pipeline-observer-and-api-deployment-template.yaml@ucxAdoTemplates
+        parameters:
+          environment: DV1
+          servicePrincipal: 'sp_dv1_rsg_eu2_ucx'
+          resourceGroup: 'dv1_rsg_eu2_ucx'
+          terraformStorageAccount: 'dv1eu2ucxtfstate'
+          terraformContainerName: $(stateContainerName)
+          terraformStateFileName: $(terraformStateFileName)
+          region: 'eastus2'
+          observerImageName: $(observerImageName)
+          apiImageName: $(apiImageName)
+          dockerRegistryName: $(dockerRegistryName)
+          dockerRegistryUrl: $(dockerRegistryUrl)
+          dockerRegistryRsg: $(dockerRegistryRsg)
+          dockerRegistrySubscription: $(dockerRegistrySubscription)
+          terraformWorkingDirectory: $(terraformWorkingDirectory)
+          assetOwner: $(assetOwner)
+          businessOwner: $(businessOwner)
+          appName: $(appName)
+          itSponsor: $(itSponsor)
+
+  - stage: IN1
+    displayName: "Deploy IN1"
+    dependsOn: Docker
+    pool:
+      name: "ubuntu-latest"
+    jobs:
+      - template: docker/azure-pipeline-observer-and-api-deployment-template.yaml@ucxAdoTemplates
+        parameters:
+          environment: IN1
+          servicePrincipal: 'sp_in1_rsg_eu2_ucx'
+          resourceGroup: 'in1_rsg_eu2_ucx'
+          terraformStorageAccount: 'in1eu2ucxtfstate'
+          terraformContainerName: $(stateContainerName)
+          terraformStateFileName: $(terraformStateFileName)
+          region: 'eastus2'
+          observerImageName: $(observerImageName)
+          apiImageName: $(apiImageName)
+          dockerRegistryName: $(dockerRegistryName)
+          dockerRegistryUrl: $(dockerRegistryUrl)
+          dockerRegistryRsg: $(dockerRegistryRsg)
+          dockerRegistrySubscription: $(dockerRegistrySubscription)
+          terraformWorkingDirectory: $(terraformWorkingDirectory)
+          assetOwner: $(assetOwner)
+          businessOwner: $(businessOwner)
+          appName: $(appName)
+          itSponsor: $(itSponsor)
+
+  - stage: PD1
+    displayName: "Deploy PD1"
+    dependsOn: Docker
+    pool:
+      name: "ubuntu-latest"
+    jobs:
+      - template: docker/azure-pipeline-observer-and-api-deployment-template.yaml@ucxAdoTemplates
+        parameters:
+          environment: PD1
+          servicePrincipal: 'sp_pd1_rsg_cus_ucx'
+          resourceGroup: 'pd1_rsg_cus_ucx'
+          terraformStorageAccount: 'cuspd1staucxtfstate'
+          terraformContainerName: $(stateContainerName)
+          terraformStateFileName: $(terraformStateFileName)
+          region: 'centralus'
+          observerImageName: $(observerImageName)
+          apiImageName: $(apiImageName)
+          dockerRegistryName: $(dockerRegistryName)
+          dockerRegistryUrl: $(dockerRegistryUrl)
+          dockerRegistryRsg: $(dockerRegistryRsg)
+          dockerRegistrySubscription: $(dockerRegistrySubscription)
+          terraformWorkingDirectory: $(terraformWorkingDirectory)
+          assetOwner: $(assetOwner)
+          businessOwner: $(businessOwner)
+          appName: $(appName)
+          itSponsor: $(itSponsor)
+
+
+azure-pipeline-acl.yml
+resources:
+  repositories:
+    # must have for adding cloud cluster topics/groups
+    - repository: ucxAdoTemplates
+      type: git
+      name: "UCX/ucx-ado-templates"
+
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  name: "eheu2pd1epvmss"
+
+variables:
+  kafkaUser: "KsvcUcxAclErss"
+
+stages:
+  - stage: DV1
+    displayName: "Add Kafka cloud settings to DV1"
+    variables:
+      endPoint: "DevEnterpriseKafkacicd-UCX"
+      partitions: 3
+      retention: 7776000000
+    jobs:
+      - job: KafkaTopicCreation
+        displayName: "Topic Creation"
+        steps:
+        - template: kafka/topic-creationV2.yml@ucxAdoTemplates
+          parameters:
+            topicName: "UCX.RequestSpecialtyUpdated"
+            partitions: ${{variables.partitions}}
+            msRetention: ${{variables.retention}}
+            cleanupPolicy: "delete"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.RequestSpecialtyUpdated'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+      - job: KafkaACLPermission
+        displayName: "ACL Permission"
+        steps:
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCXDueDateCalculatedTopic'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.RequestUrgencyUpdated'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.DueDateMissed'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.ServicingProviderInfoUpdated'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.AclServiceErssProviderInfo'
+            user: $(kafkaUser)
+            operation: "RO"
+            aclType: "GROUP"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.AclServiceErssProviderInfoV2'
+            user: $(kafkaUser)
+            operation: "RO"
+            aclType: "GROUP"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'IOPreAuthThindboTblQueueHisory'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.RoutingRequestAssigned'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.AclServiceErssCaseAssignmentChanged'
+            user: $(kafkaUser)
+            operation: "RO"
+            aclType: "GROUP"
+            endPoint:  ${{variables.endPoint}}
+
+  - stage: IN1
+    displayName: "Add Kafka cloud settings to IN1"
+    variables:
+      endPoint: "IntEnterpriseKafkacicd-UCX"
+      partitions: 3
+      retention: 7776000000
+    jobs:
+      - job: KafkaTopicCreation
+        displayName: "Topic Creation"
+        steps:
+        - template: kafka/topic-creationV2.yml@ucxAdoTemplates
+          parameters:
+            topicName: "UCX.RequestSpecialtyUpdated"
+            partitions: ${{variables.partitions}}
+            msRetention: ${{variables.retention}}
+            cleanupPolicy: "delete"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.RequestSpecialtyUpdated'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+      - job: KafkaACLPermission
+        displayName: "ACL Permission"
+        steps:
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCXDueDateCalculatedTopic'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.RequestUrgencyUpdated'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.DueDateMissed'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.ServicingProviderInfoUpdated'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.AclServiceErssProviderInfo'
+            user: $(kafkaUser)
+            operation: "RO"
+            aclType: "GROUP"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.AclServiceErssProviderInfoV2'
+            user: $(kafkaUser)
+            operation: "RO"
+            aclType: "GROUP"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'IOPreAuthThindboTblQueueHisory'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.RoutingRequestAssigned'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.AclServiceErssCaseAssignmentChanged'
+            user: $(kafkaUser)
+            operation: "RO"
+            aclType: "GROUP"
+            endPoint:  ${{variables.endPoint}}
+
+  - stage: PD1
+    displayName: "Add Kafka cloud settings to PD1"
+    variables:
+      endPoint: "ProdEnterpriseKafkacicd-UCX"
+      partitions: 12
+      retention: -1
+    jobs:
+      - job: KafkaTopicCreation
+        displayName: "Topic Creation"
+        steps:
+        - template: kafka/topic-creationV2.yml@ucxAdoTemplates
+          parameters:
+            topicName: "UCX.RequestSpecialtyUpdated"
+            partitions: ${{variables.partitions}}
+            msRetention: ${{variables.retention}}
+            cleanupPolicy: "delete"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.RequestSpecialtyUpdated'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+      - job: KafkaACLPermission
+        displayName: "ACL Permission"
+        steps:
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCXDueDateCalculatedTopic'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.RequestUrgencyUpdated'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.DueDateMissed'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.ServicingProviderInfoUpdated'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.AclServiceErssProviderInfo'
+            user: $(kafkaUser)
+            operation: "RO"
+            aclType: "GROUP"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.AclServiceErssProviderInfoV2'
+            user: $(kafkaUser)
+            operation: "RO"
+            aclType: "GROUP"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'IOPreAuthThindboTblQueueHisory'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.RoutingRequestAssigned'
+            user: $(kafkaUser)
+            operation: "RW"
+            aclType: "TOPIC"
+            endPoint:  ${{variables.endPoint}}
+        - template: kafka/acl-creationV2.yml@ucxAdoTemplates
+          parameters:
+            resourceName: 'UCX.AclServiceErssCaseAssignmentChanged'
+            user: $(kafkaUser)
+            operation: "RO"
+            aclType: "GROUP"
+            endPoint:  ${{variables.endPoint}}
+
+
+DockerFile
+FROM globalcrep.azurecr.io/evicore-aspnet:7.0.0-alpine AS base
+WORKDIR /app
+EXPOSE 80
+EXPOSE 443
+
+FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
+
+RUN curl -L https://raw.githubusercontent.com/Microsoft/artifacts-credprovider/master/helpers/installcredprovider.sh  | sh
+ARG FEED_ACCESSTOKEN
+ENV VSS_NUGET_EXTERNAL_FEED_ENDPOINTS="{\"endpointCredentials\": [{\"endpoint\":\"https://pkgs.dev.azure.com/eviCoreDev/_packaging/eviCoreVSTSNugetFeed/nuget/v3/index.json\", \"username\":\"Docker\", \"password\":\"${FEED_ACCESSTOKEN}\"}]}"
+
+WORKDIR /src
+
+COPY . .
+
+FROM build AS publish
+RUN dotnet publish "/src/Ucx.AclService.Erss.App/Ucx.AclService.Erss.App.csproj" -c Release -o /app/publish --configfile NuGet.Config
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "Ucx.AclService.Erss.App.dll"]
+
+Redis.tf
+module "redis" {
+  source                        = "git::ssh://git@ssh.dev.azure.com/v3/eviCoreDev/eviCore%20Platform/ep-terraform-modules//redis?ref=v4.0.3"
+  sku_name                      = "Premium"
+  family                        = "P"
+  capacity                      = var.redis_capacity
+  location                      = var.location
+  environment                   = var.environment
+  domain                        = "ucx${local.domain}"
+  resource_group_name           = var.resource_group_name
+  shard_count                   = var.redis_shard_count
+  tier                          = local.tags.Tier
+  cost_center                   = local.tags.CostCenter
+  business_owner                = local.tags.BusinessOwner
+  it_sponsor                    = local.tags.ITSponsor
+  asset_owner                   = local.tags.AssetOwner
+  app_name                      = local.tags.AppName
+  app_category                  = local.tags.AppCategory
+  app_owner                     = local.tags.AppOwner
+  service_now_ba                = local.tags.ServiceNowBA
+  service_now_as                = local.tags.ServiceNowAS
+  security_review_id            = local.tags.SecurityReviewID
+  data_subject_area             = local.dataRestTags.DataSubjectArea
+  compliance_data_category      = local.redisDataRestTags.ComplianceDataCategory
+  data_classification           = local.redisDataRestTags.DataClassification
+  business_entity               = local.dataRestTags.BusinessEntity
+  line_of_business              = local.dataRestTags.LineOfBusiness
+  public_network_access_enabled = false
+
+  # Monitoring is not optional with this module. Several monitors are created automatically with these email addresses. See below
+  monitor_action_group_id                     = data.azurerm_monitor_action_group.ag.id # see azure-monitor-action-group
+  redis_max_connections_alert_warn_threshold  = 3750
+  redis_max_connections_alert_error_threshold = 6375
+  redis_max_connections_alert_crit_threshold  = 7275
+}
+
+module "ep_private_endpoint_redis" {
+  source                    = "git@ssh.dev.azure.com:v3/eviCoreDev/Terraform%20Modules/ep-private-endpoint?ref=v1.1.1"
+  environment               = var.environment
+  location                  = var.location
+  domain                    = "ucx${local.domain}-redis"
+  product                   = local.product
+  resource_group_name       = var.resource_group_name
+  resource_id               = module.redis.redis_cache.id
+  subnet_id_integration     = var.subnet_id_integration
+  subnet_id_private         = var.subnet_id_private_redis
+  swift_connection_required = false
+  subresources              = ["redisCache"]
+  timeout_create            = "6h"
+  bc_tier                   = local.tags.Tier
+  cost_center               = local.tags.CostCenter
+  it_sponsor                = local.tags.ITSponsor
+  asset_owner               = local.tags.AssetOwner
+  app_name                  = local.tags.AppName
+  app_team                  = local.tags.AppTeam
+  app_owner                 = local.tags.AppOwner
+  business_owner            = local.tags.BusinessOwner
+  data_classification       = local.tags.DataClassification
+  service_now_ba            = local.tags.ServiceNowBA
+  service_now_as            = local.tags.ServiceNowAS
+  security_review_id        = local.tags.SecurityReviewID
+
+}
+
+
+
+Thanks and Regards
+Siraj
+

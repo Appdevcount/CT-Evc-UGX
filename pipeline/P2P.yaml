@@ -1,0 +1,389 @@
+Checkmarx.yml
+parameters:
+  - name: projectName
+    type: string
+  - name: serviceConnection
+    type: string
+  - name: fullTeamName
+    type: string
+  - name: projectRepoUrl
+    type: string
+  - name: pointOfContactEmail
+    type: string
+  - name: excludedFolder
+    type: string
+  - name: commentsScriptFilePath  
+    
+steps:
+  #Preform checkmarx security scan
+  - task: Application security testing@2022
+    displayName: 'Checkmarx Security Scan'
+    inputs:
+      projectName: ${{ parameters.projectName }}
+      enableProxy: false
+      enableSastScan: true
+      CheckmarxService: ${{ parameters.serviceConnection }}
+      fullTeamName: ${{ parameters.fullTeamName }}
+      folderExclusion: 'cvs, .svn, .hg , .git, .bzr, bin , obj,  backup, .idea, node_modules, ${{ parameters.excludedFolder }}'
+      fileExtension: '!**/*.DS_Store, !**/*.ipr, !**/*.iws, !**/*.bak, !**/*.tmp, !**/*.aac, !**/*.aif, !**/*.iff, !**/*.m3u, !**/*.mid, !**/*.mp3,!**/*.mpa, !**/*.ra, !**/*.wav, !**/*.wma, !**/*.3g2, !**/*.3gp, !**/*.asf, !**/*.asx, !**/*.avi,!**/*.flv, !**/*.mov, !**/*.mp4, !**/*.mpg,  !**/*.rm, !**/*.swf, !**/*.vob, !**/*.wmv, !**/*.bmp, !**/*.gif, !**/*.jpg, !**/*.png, !**/*.psd, !**/*.tif, !**/*.swf, !**/*.jar, !**/*.zip, !**/*.rar, !**/*.exe, !**/*.dll, !**/*.pdb, !**/*.7z, !**/*.gz, !**/*.tar.gz, !**/*.tar, !**/*.gz, !**/*.ahtm, !**/*.ahtml, !**/*.fhtml, !**/*.hdm, !**/*.hdml,   !**/*.hsql, !**/*.ht, !**/*.hta, !**/*.htc, !**/*.htd, !**/*.war, !**/*.ear, !**/*.htmls, !**/*.ihtml, !**/*.mht, !**/*.mhtm, !**/*.mhtml, !**/*.ssi, !**/*.stm, !**/*.stml, !**/*.ttml, !**/*.txn, !**/*.xhtm, !**/*.xhtml, !**/*.class, !**/*.iml'
+      comment: '{ "repo_url": ${{ parameters.projectRepoUrl }}, "point_of_contact": ${{ parameters.pointOfContactEmail }} }'
+      avoidDuplicateScans: true
+      enableDependencyScan: false
+  #Convert checkmarx report into variables
+  - task: oneLuckiDevJson2Variable@1
+    displayName: 'JSON to Variable'
+    inputs:
+      jsonFile: '$(Agent.BuildDirectory)\cxReport_$(Build.BuildNumber).json'
+      shouldPrefixVariables: true
+  #Add checkmarx comments to pull request    
+  - task: PowerShell@2
+    displayName: Adding checkmarx findings to PR
+    inputs:
+      targetType: filePath
+      filePath: ${{ parameters.commentsScriptFilePath }}
+      arguments: >
+        -pat $(pat)
+        -highResults $(json.highResults)
+        -mediumResults $(json.mediumResults)
+        -lowResults $(json.lowResults)
+        -sastScanResultsLink '$(json.sastScanResultsLink)'
+
+
+Thanks and Regards
+Siraj
+
+From: R, Sirajudeen (CTR) 
+Sent: Tuesday, August 27, 2024 7:02 PM
+To: R, Sirajudeen (CTR) <sirajudeen.r@evicore.com>
+Subject: p2p
+
+Sonarqube Chckmarx
+
+pool:
+  name: eheu2pd1epvmss
+
+trigger:
+  branches:
+    exclude:
+      - '*'
+
+resources:
+  repositories:
+    # must have for adding cloud cluster topics/groups
+    - repository: ucxAdoTemplates
+      type: git
+      name: 'UCX/ucx-ado-templates'
+
+variables:
+  buildConfiguration: "Release"
+  uiWorkingDir:       "Ucx.MemberHistory.Ui"
+  apiContainerName: 'ucx-member-history-service-api'
+  apiDockerFileLocation: './Ucx.MemberHistory.Service/UCX.MemberHistoryService.Api/Dockerfile'
+  observerContainerName: 'ucx-member-history-service-observer'
+  observerDockerFileLocation: './Ucx.MemberHistory.Service/UCX.MemberHistoryService.Observer/Dockerfile'
+  replayObserverContainerName: 'ucx-member-history-service-observer-replay'
+  replayObserverDockerFileLocation: './Ucx.MemberHistory.Service/UCX.MemberHistoryService.Observer.Replay/Dockerfile'
+  dockerRegistry: 'globalcrep-acr'
+  dockerRegistryName: 'globalcrep'
+  dockerRegistryRsg: 'global_rsg_ep'
+  dockerRegistrySubscription: 'a0c6645e-c3da-4a78-9ef6-04ab6aad45ff'
+  dockerRegistryUrl: 'globalcrep.azurecr.io'
+  terraformWorkingDirectory: './Ucx.MemberHistory.Service/Infrastructure'
+  dotnetVersion: '7.x'
+  nugetConfigPath: './Ucx.MemberHistory.Service/NuGet.Config'
+  terraformStateFileName: 'ucx-member-history-service.tfstate'
+  solutionPath: './Ucx.MemberHistory.sln'
+  testPath: './Ucx.MemberHistory.sln --filter FullyQualifiedName!~Ucx.MemberHistory.Tests.Tests'
+  stateContainerName: 'terraform-member-history-service-container'
+  testProjectPath: './Ucx.MemberHistory.AutomationTests/Ucx.MemberHistory.Tests/Ucx.MemberHistory.Tests.csproj'
+  nugetConfigPathForAutomationTests: './Ucx.MemberHistory.AutomationTests/Nuget.config'
+
+stages:
+  - stage: 'AutomationTests'
+    jobs:
+      - job: Automation
+        displayName: 'Run Automation'
+        pool:
+          name: Automation_Win_NonProd
+          demands:
+            - msbuild
+            - visualstudio
+        steps:
+          - task: UseDotNet@2
+            displayName: 'Install .NET 7 SDK'
+            inputs:
+              packageType: 'sdk'
+              version: '7.x'
+              performMultiLevelLookup: true
+          - task: DotNetCoreCLI@2
+            displayName: 'Dotnet: Restore'
+            inputs:
+              command: 'restore'
+              feedsToUse: 'config'
+              nugetConfigPath: './Ucx.MemberHistory.Service/NuGet.Config'
+              externalFeedCredentials: 'epplatform'
+              noCache: true
+              restoreDirectory: '$(System.DefaultWorkingDirectory)/.NugetPackages'
+          - task: DotNetCoreCLI@2
+            displayName: 'UI Automation: Test Validation'
+            inputs:
+              command: 'test'
+              proejcts: '**/*Test/*.csproj'
+              arguments: '--no-restore'
+  - stage: 'Sonarqube'
+    dependsOn: []
+    jobs:
+      - job: SonarQubeAnalysis
+        displayName: 'Running: SonarQube Analysis'
+        pool:
+          name: 'eheu2pd1epvmss'
+        steps:
+          - task: SonarQubePrepare@5
+            continueOnError: true
+            inputs:
+              SonarQube: 'Cigna SonarQube Prod-UCX'
+              scannerMode: 'MSBuild'
+              projectKey: 'UCX.MemberHistoryService'
+              projectName: 'UCX.MemberHistoryService'
+              extraProperties: |
+                sonar.cs.opencover.reportsPaths=$(Build.SourcesDirectory)\coverage.opencover.xml
+                sonar.cs.xunit.reportsPaths=$(Build.SourcesDirectory)**/*.trx
+                sonar.exclusions=**/*.yml, **/*.yaml
+                sonar.coverage.exclusions="**Tests*.cs"
+          - task: DotNetCoreCLI@2
+            displayName: dotnet restore
+            inputs:
+              command: 'restore'
+              feedsToUse: 'config'
+              nugetConfigPath: './Ucx.MemberHistory.Service/NuGet.Config'
+              externalFeedCredentials: 'epplatform'
+          - task: DotNetCoreCLI@2
+            displayName: 'Dotnet Build'
+            inputs:
+              projects: '**/*.csproj'
+              arguments: '-c Release -o $(Build.ArtifactStagingDirectory)'
+          - task: DotNetCoreCLI@2
+            displayName: 'Dotnet Test'
+            enabled: true
+            inputs:
+              command: 'test'
+              projects: '**/*Test/*.csproj'
+              arguments: '--configuration $(buildConfiguration) --logger trx --results-directory $(Build.SourcesDirectory)\ /p:CollectCoverage=true /p:CoverletOutputFormat=opencover /p:CoverletOutput=$(Build.SourcesDirectory)\'
+              publishTestResults: false
+          - task: PublishTestResults@2
+            displayName: 'Publish Test Results'
+            continueOnError: true
+            inputs:
+              testResultsFormat: VSTest
+              testResultsFiles: '**/*.trx'
+              searchFolder: '$(Build.SourcesDirectory)'
+              failTaskOnFailedTests: true
+          - task: reportgenerator@5
+            displayName: 'Generating Report'
+            inputs:
+              reports: 'coverage.opencover.xml'
+              targetdir: 'coveragereport'
+              sourcedirs: '$(Build.SourcesDirectory)'
+            continueOnError: true
+          - task: PublishCodeCoverageResults@1
+            displayName: 'Publish Code Coverage Results'
+            inputs:
+             codeCoverageTool: Cobertura
+             summaryFileLocation: '$(Build.SourcesDirectory)/coveragereport/Cobertura.xml'
+             reportDirectory: '$(Build.SourcesDirectory)/coveragereport'
+            env:
+             DISABLE_COVERAGE_AUTOGENERATE: 'true'
+          - task: SonarQubeAnalyze@5
+            continueOnError: true
+          - task: SonarQubePublish@5
+            inputs:
+              pollingTimeoutSec: '300'
+              
+  - stage: 'SonarQubeUI'
+    dependsOn: [ ]
+    jobs: 
+      - job: SonarQubeUI
+        pool:
+          name: 'eheu2pd1epvmss'
+        steps:
+          - task: Npm@1
+            displayName: 'npm install'
+            inputs:
+              command: 'install'
+              workingDir: $(uiWorkingDir)
+          - task: Npm@1
+            displayName: 'npm run test'
+            inputs:
+              command: 'custom'
+              customCommand: 'run test --coverage'
+              workingDir: $(uiWorkingDir)
+          - task: PublishCodeCoverageResults@1
+            inputs:
+              codeCoverageTool: Cobertura
+              summaryFileLocation: $(uiWorkingDir)/coverage/lcov.info
+              reportDirectory: $(uiWorkingDir)/coverage
+          - task: SonarQubePrepare@5
+            continueOnError: true
+            inputs:
+              SonarQube: 'Cigna SonarQube Prod-UCX'
+              scannerMode: 'CLI'
+              configMode: 'manual'
+              cliprojectKey: 'UCX.MemberHistoryMicroUI'
+              cliprojectName: 'UCX.MemberHistoryMicroUI'
+              extraProperties: |
+                sonar.sources=$(uiWorkingDir)/src
+                sonar.tests=$(uiWorkingDir)/src
+                sonar.exclusions=$(uiWorkingDir)/src/index.tsx,$(uiWorkingDir)/src/**/*.ts
+                sonar.test.inclusions=$(uiWorkingDir)/src/**/*.test.ts,$(uiWorkingDir)/src/**/*.test.tsx,$(uiWorkingDir)/src/__test__/**/*.test.ts,src/**/*.spec.ts
+                sonar.coverage.exclusions=$(uiWorkingDir)/src/index.tsx,$(uiWorkingDir)/src/**/*.ts
+                sonar.javascript.lcov.reportPaths=$(uiWorkingDir)/coverage/lcov.info
+                sonar.testExecutionReportPaths=$(uiWorkingDir)/coverage/test-report.xml
+          - task: SonarQubeAnalyze@5
+            continueOnError: true
+          - task: SonarQubePublish@5
+            inputs:
+              pollingTimeoutSec: "300"
+  - stage: 'CheckMarx'
+    dependsOn: []
+    jobs:
+      - job: CheckMarxService
+        displayName: 'Running: Checkmarx Analysis for Service'
+        pool:
+          name: 'eheu2pd1epvmss'
+        steps:
+          - template: checkmarx.yml
+            parameters:
+              projectName: 'UCX.MemberHistoryService'
+              serviceConnection: 'Everest-Checkmarx-SAST-Service-Connection'
+              fullTeamName: 'CxServer/Cigna/Everest'
+              projectRepoUrl: 'https://eviCoreDev@dev.azure.com/eviCoreDev/UCX/_git/Ucx.MemberHistory'
+              excludedFolder: 'Ucx.MemberHistory.Ui'
+              pointOfContactEmail: 'pravin.phulari@evicore.com'
+              commentsScriptFilePath: './Ucx.MemberHistory.Service/Pipelines/CheckmarxPRComments.ps1'
+      - job: CheckMarxUi
+        dependsOn: []
+        displayName: 'Running: Checkmarx Analysis for UI'
+        pool:
+          name: 'eheu2pd1epvmss'
+        steps:
+          - template: checkmarx.yml
+            parameters:
+              projectName: 'UCX.MemberHistoryMicroUI'
+              serviceConnection: 'Everest-Checkmarx-SAST-Service-Connection'
+              fullTeamName: 'CxServer/Cigna/Everest'
+              projectRepoUrl: 'https://eviCoreDev@dev.azure.com/eviCoreDev/UCX/_git/Ucx.MemberHistory'
+              excludedFolder: 'Ucx.MemberHistory.Service'
+              pointOfContactEmail: 'pravin.phulari@evicore.com'
+              commentsScriptFilePath: './Ucx.MemberHistory.Service/Pipelines/CheckmarxPRComments.ps1'
+        workspace:
+          clean: all
+
+  - stage: Build
+    jobs:
+      - template: dotnet/build-and-test.yaml@ucxAdoTemplates
+        parameters:
+          dotnetVersion: $(dotnetVersion)
+          nugetConfigPath: $(nugetConfigPath)
+          solutionPath: $(solutionPath)
+          testPath: $(testPath)
+
+  - stage: DV1_Infrastructure_Plan
+    jobs:
+      - job: DV1_Infrastructure
+        displayName: "Review DV1 Infrastructure Changes"
+        condition: or(eq(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.Reason'], 'Manual'))
+        steps:
+          - checkout: self
+          - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@0
+            displayName: "Install Terraform"
+            inputs:
+              terraformVersion: "latest"
+          - powershell: |
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/Terraform%20Modules/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/Terraform%20Modules'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/Terraform%20Modules/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/Terraform%2520Modules'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/eviCore%20Platform/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/eviCore%20Platform'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/eviCore%20Platform/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/eviCore%2520Platform'
+                  git config --global -l
+            displayName: Git url rewrite
+          - task: TerraformTaskV2@2
+            displayName: "Terraform init"
+            inputs:
+              provider: "azurerm"
+              command: "init"
+              workingDirectory: $(terraformWorkingDirectory)
+              backendServiceArm: 'sp_dv1_rsg_eu2_ucx'
+              backendAzureRmResourceGroupName: 'dv1_rsg_eu2_ucx'
+              backendAzureRmStorageAccountName: 'dv1eu2ucxtfstate'
+              backendAzureRmContainerName: $(stateContainerName)
+              backendAzureRmKey:  $(terraformStateFileName)
+          - task: TerraformTaskV2@2
+            displayName: "Terraform plan"
+            name: 'TerraformA'
+            inputs:
+              provider: "azurerm"
+              command: "plan"
+              workingDirectory: $(terraformWorkingDirectory)
+              commandOptions: '-var-file Environments/dv1.tfvars -var=resource_group_name="dv1_rsg_eu2_ucx" -var=container_image_version="$(Build.BuildNumber)" -var=observer_container_image_name="$(observerContainerName)" -var=api_container_image_name="$(apiContainerName)" -var=docker_registry_name="$(dockerRegistryName)" -var=docker_registry="$(dockerRegistryUrl)" -var=docker_registry_rsg=$(dockerRegistryRsg) -var=docker_registry_sub=$(dockerRegistrySubscription) -out=tfplan.out'
+              environmentServiceNameAzureRM: 'sp_dv1_rsg_eu2_ucx'
+
+  - stage: IN1_Infrastructure_Plan
+    jobs:
+      - job: IN1_Infrastructure
+        displayName: "Review IN1 Infrastructure Changes"
+        condition: or(eq(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.Reason'], 'Manual'))
+        steps:
+          - checkout: self
+          - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@0
+            displayName: "Install Terraform"
+            inputs:
+              terraformVersion: "latest"
+          - powershell: |
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/Terraform%20Modules/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/Terraform%20Modules'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/Terraform%20Modules/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/Terraform%2520Modules'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/eviCore%20Platform/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/eviCore%20Platform'
+                  git config --global --add url."https://eviCoreDev:$(System.AccessToken)@dev.azure.com/eviCoreDev/eviCore%20Platform/_git".insteadOf 'ssh://git@ssh.dev.azure.com/v3/eviCoreDev/eviCore%2520Platform'
+                  git config --global -l
+            displayName: Git url rewrite
+          - task: TerraformTaskV2@2
+            displayName: "Terraform init"
+            inputs:
+              provider: "azurerm"
+              command: "init"
+              workingDirectory: $(terraformWorkingDirectory)
+              backendServiceArm: 'sp_in1_rsg_eu2_ucx'
+              backendAzureRmResourceGroupName: 'in1_rsg_eu2_ucx'
+              backendAzureRmStorageAccountName: 'in1eu2ucxtfstate'
+              backendAzureRmContainerName:  $(stateContainerName)
+              backendAzureRmKey: $(terraformStateFileName)
+          - task: TerraformTaskV2@2
+            displayName: "Terraform plan"
+            name: 'TerraformA'
+            inputs:
+              provider: "azurerm"
+              command: "plan"
+              workingDirectory: $(terraformWorkingDirectory)
+              commandOptions: '-var-file Environments/in1.tfvars -var=resource_group_name="in1_rsg_eu2_ucx" -var=container_image_version="$(Build.BuildNumber)" -var=observer_container_image_name="$(observerContainerName)" -var=api_container_image_name="$(apiContainerName)" -var=docker_registry_name="$(dockerRegistryName)" -var=docker_registry="$(dockerRegistryUrl)" -var=docker_registry_rsg=$(dockerRegistryRsg) -var=docker_registry_sub=$(dockerRegistrySubscription) -out=tfplan.out'
+              environmentServiceNameAzureRM: 'sp_in1_rsg_eu2_ucx'
+
+
+
+
+services.AddHsts(options =>
+{
+options.Preload = true;
+options.IncludeSubDomains = true;
+options.MaxAge = TimeSpan.FromDays(60);
+});
+services.Configure<CookiePolicyOptions>(option =>
+{
+option.Secure = CookieSecurePolicy.Always;
+option.HttpOnly = HttpOnlyPolicy.Always;
+});
+
+
+app.UseHsts();
+app.UseCookiePolicy();
+
+Thanks and Regards
+Siraj
+

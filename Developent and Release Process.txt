@@ -1,0 +1,273 @@
+Scrum teams are going to utilize the story pointing scale methodology (Fibonacci) and will assign story points based on effort. The estimated effort will have a high level definition that will enable TPOs to align and inform on deliverable estimates for upper management.     
+Story points standardization details:  
+13 – TPO will need to breakdown effort to ensure it is manageable within a sprint
+8 story points – 2 weeks of effort or less
+5 story points – 1 week of effort or less
+3 story points – 3 days of effort or less
+2 story points – 2 days of effort or less
+1 story points – 1 day of effort or less
+Roles & Responsibilities
+	Technical Product Owners are responsible for the creation of the following standard stories per Sprint:
+o	Administrative off sprint activities
+o	Release Activities 
+	Scrum Masters are responsible for the automation of tasks creation per story or ensure that developers are manually entering each task per story.
+	Engineering Team is responsible for the maintenance of each task by entering the appropriate time spent and ensuring that each task is in the appropriate status. 
+Specific Procedures 
+Technical Product Owners will create the following stories per Sprint:
+	Administrative off Sprint Activities – The Engineering team is responsible for creating a task with the name of the developer/resource. The purpose of this task is to track how many hours per Sprint a resource is utilizing in meetings or tasks that are not Sprint related. Example: processes meetings, engineering meetings, group meetings that are not related to in sprint effort, etc…
+	Release Activities – The Engineering team is responsible for creating a task with the name of the developer/resource. The purpose of this task is to track how many hours per Sprint a resource is spending in Release Activities.
+Stories mentioned above must be linked to an Administrative Feature provided by the CTPO.
+Scrum Master or the Engineering Team will ensure that each User Story that it is part of a Sprint contains the following tasks: 
+	Analysis and Design
+	Development + Unit Testing
+	Peer Review
+	Functional Testing (Dev + Integration)
+	PO Sign off
+	Technical Documentation
+Engineering Team is responsible for the maintenance of each tasks and ensuring that hours per tasks are entered on a daily basis. 
+The execution of guaranteeing that the stories and the tasks presented above are part of a new Sprint must occur during Sprint Planning. This will allow us to have a clean start of a new Sprint avoiding the addition of new tasks as much as possible. 
+
+SPRINT REFINEMENT FOR NEXT SPRINT BEFORE START - SPRINT PLANNING AT START OF SPRINT INVOLVES ESTIMATION – TEAM CAPACITY PLANNING
+
+SPRINT RELEASE READINESS CALL
+
+Feature 646957: Ability to view ePA requests within UCX
+•	 
+Owned by Sagar Shinde
+Last updated: Nov 16, 2023
+3 min read
+ Attachments
+Status
+In Progress
+Context
+As part of clinical review process UCX system needs to view requests created by ePA system. So that clinical users can perform the review and provide determinations on the request from UCX platform.
+Decision Drivers
+•	There should be minimal/no impact on downstream consumers
+•	It should handle historical requests
+•	It should have minimal impact on current workflows
+Current System Workflow/Process
+When request is created in any origin system (IO/CW/ePA), CaseSaved event is generated and published to XPLERSSCaseSavedEvent topic. Messages from this topic are consumed by ERSS system to further enriched it with all the necessary information and published to XPLERSSEnrichedIOne and XPLERSSFinal topics. UCX system consumes messages from XPLERSSEnrichedIOne & XPLERSSFinal topics, and creates UCX specific events. These UCX events are consumed by different UCX platform microservices which will load the request in UCX eco system. 
+Currently request created via ePA doesn’t have proper event information about initial request creation in CaseSaved event. Ideally when request is created from origin system, CaseSaved event should hold below structure.  
+Considered Options
+Option 1: Raise CaseSaved event with delta as null from ePA
+Scenario 1: Handle new requests
+
+Pros:
+•	No code changes to consumer application(UCX) 
+•	Easy to implement and maintain
+•	This api can be utilized to publish CaseSaved event across applications and reduce code in specific applications
+Cons:
+NA
+
+Understand Dependencies on different teams:
+Description	Environment	HI2 Team	XPG Team	Status
+Need some historical episodes data on XPLERSSFinalHistory topic for validating changes on lower environment	Dev & INTG	Need to populate some historical episode ids to XPLERSSEnrichedIOneHistory topic with same latest schema present in XPLERSSEnrichedIOne topic	Need to consume and process data from XPLERSSEnrichedIOneHistory and push the same to XPLERSSFinalHistory topic with same latest schema present in XPLERSSFinal topic	Done on INTG
+
+Current State & Challenges or any Blockers:
+Topic Name	Environment	Description	Action Item	Remarks/Status
+XPLERSSEnrichedIOneHistory	Development	No data present	HI2 team to push some data	Dev process is not setup for HI2 team. 
+
+
+UCX:
+Pre-Prod Validations
+1.	Azure AD account created in PROD (added by Vilesh Malhotra) 
+Name: UCXCaseLock
+2.	ResourceLockManagementB2C permissions (Get, Post, Delete APIs) on UCXCaseLock azure AD account - Checked already (by vilesh)
+3.	Client Secret ID generated for Azure AD account and added in Azure Key vaults (added by Vilesh Malhotra)
+Key Vault Name: ehcuspd1ucxreqsearchakv
+Secret Key name: OauthClientSecret
+Prod Deployment Pipeline and Repos
+Below PRs needs to be deployed. All 3 can be deployed together
+Repo Name	Pipeline URL	Owner for Deployment
+UCX.CaseLockService	Pipelines - Run 20240108.2 (azure.com)
+ 
+ 	Pipelines - Run 20240108.2 (azure.com)
+ 
+UCX.UI_2	to be added once pipeline is finalised	 
+Post Prod Validations
+1.	Check in APIM we can see Get(/api/caseLock/getLock), POST(/api/caseLock/postLock), DELETE(/api/caseLock/deleteLock) and another DELETE(/api/caseLock/deleteLockByUserId) APIs 
+APIM resource name: ehpd1apihosted
+2.	Check with Business if lock is getting created and released as per the requirement specified.
+RollBack Plan
+1.	Re-deploy changes from main branch for below repositories
+Repo Name	Pipeline Name
+UCX.CaseLockService	UCX.CaseLockService.Ui
+ 	UCX.CaseLockService
+UCX.UI_2	UCX UI (UCX.UI_2)
+2.	Check in APIM we can see POST(/api/caseLock/acquireLock)and DELETE APIs (/api/caseLock/releaseLock)
+APIM resource name: ehpd1apihosted
+CDP:
+Pre-Prod Validations-
+ 
+1.	ClientID key name : LockClientID 
+2.	Secret Key name : LockClientSecret 
+Prod Deployment Pipeline and Repos
+ 
+Sr No.	Repo Name	Pipeline URL
+1	CCN.CaseManagement	 
+ 	 	 
+ 
+Post Prod Validations
+ 
+1.	Check with Business if lock is getting created and released as per the requirement specified. 
+RollBack Plan
+ 
+1.	Re-deploy changes from main branch for below repositories
+Sr No.	Repo Name	Pipeline Name
+Sr No.	Repo Name	Pipeline Name
+1	CCN.CaseManagement	CCN.CaseManagement_release
+ 	 	 
+				
+Routing Enhancement
+•	 
+•	 
+Owned by Sagar Shinde
+Last updated: Apr 10, 2024 by Sirajudeen R
+2 min read
+ Attachments
+Status
+In Progress
+Context
+Current implementation of routing service requires frequent replays in case of new medical discipline onboarding or any new event version upgrade. This replays takes too much time appx 10-15 days to cover all the messages. Also separate infrastructure is required to carry out this replay process.
+Current System Workflow/Process
+•	Currently routing service has medical discipline filter which only processes allowed disciplines from config
+•	Routing service create history of events for each request and does the internal replay of events after all the events are ordered in sequence
+•	Internal replay process each event in history and only one version of the event is supported by handler
+Considered Options
+Option 1: Remove medical discipline filter and allow support for multiple event version processing in handlers
+•	Remove medical discipline filter and allow processing request for all disciplines
+•	Add filter at the API to onboard medical disciplines incrementally
+•	Add logic to process single latest version of the event in case of multiple versions of the same event is raised
+•	Support multiple event version processing in handler for internal replays. This is required to handle existing event in the history which has older version in it
+ 
+Pros:
+•	No replay of kafka messages
+•	Faster delivery
+•	Reduced Cosmos RU consumption required for replays
+Cons:
+•	Increase in Index documents
+ 
+Cost Analysis of CosmosDB during Replay in RequestRouting:
+Regular RU/Throughput setting for the RequestHistory Container in Prod = 9000 RU
+Replay RU/Throughput setting for the RequestHistory Container in Prod = 80000 RU
+Average Replay period for RequestRouting topics(21) as per last 2 occurrences = 10 days
+Cost of Replay activity for increasing the RU of RequestHistory container to additional 71000 RU 
+Azure CosmosDB Billing Cost = 0.008$ per 100 RUs/hr
+Cost of 71000 RUs for 10 days = (71000(RUs)/100)*0.008(cost)*24(hrs per day)*10(days)
+= 1363.2 $
+Avoiding replay for any new Program Onboarding will save the cost of 1363.2$ per new program in RequestRouting
+Avoiding replay on any version upgrade will save the cost of 1363.2$ per new version upgrade in RequestRouting
+No Additional Storage bill for container as all the program data is already available in RequestHistory container as per the current design
+Cost of Azure Search service:
+Current Prod Pricing Plan for Request Search = Standard S1
+Allowed Storage = 25 GB
+Price per SU = 0.34$/hr
+Storage Limit calculation as per current Pricing Plan:
+For the Configured Programs [Sleep,Gastro,DME,Radiology and Cardiology]
+Current Usage in INTG = 9MB/25GB (Only 0.035% is the storage usage for 23000 documents in Index which includes both Blue and Green)
+Need to check on the Current Usage in Prod, and the possibility of additional usage for new Programs
+Services created after April 3, 2024 in same Standard S1 plan has 160GB as allowed Storage limit
+The Next extended storage capacity Pricing Plan for Azure Search service = Standard S2
+Allowed Storage = 350 GB
+Price per SU = 1.35$/hr
+
+
+
+Thanks and Regards
+Siraj
+
+From: R, Sirajudeen (CTR) 
+Sent: Monday, August 26, 2024 12:44 PM
+To: R, Sirajudeen (CTR) <sirajudeen.r@evicore.com>
+Subject: UcBSE
+
+
+
+Thanks and Regards
+Siraj
+
+
+
+Thanks and Regards
+Siraj
+
+From: R, Sirajudeen (CTR) 
+Sent: Monday, August 26, 2024 12:43 PM
+To: R, Sirajudeen (CTR) <sirajudeen.r@evicore.com>
+Subject: Dev-Rel prcs
+
+
+
+Thanks and Regards
+Siraj
+
+
+
+
+Role	Responsibilities	Ownership/Handoff	Comment
+Role	Responsibilities	Ownership/Handoff	Comment
+Engineering Leads (Manager and Sr. Manager)	1.	Manages staffing strategy to ensure Scrum teams have Team Members they need, that Team Members are 100% dedicated, and that Scrum teams are long-lived.
+2.	Accountable for meeting IT Organization goals and financial commitments that are specific to the department/experience.
+3.	Facilitate and provide input the right technological choices (e.g., upgrade decisions, hosting decisions) within standards to best deliver business value and financial commitments.
+4.	Has familiarity with specific systems/apps/domain the Team Members are working on.
+5.	Oversees development standards, ensuring adherence across teams within a department or experience.
+6.	Facilitates resolving disagreements regarding technical requirements for interdependencies across the department/experience.
+7.	Utilizes in-depth professional and Domain knowledge to set departmental/ experience goals which align with Technology goals/strategy.
+8.	Establish collaboration space across all engineering teams within the department/experience and across evicore Technology.
+9.	Evangelize data-driven decision making and help produce relevant metrics/insights for SLT
+10.	Partner with leaders to continue to invest in people’s talent and nurture a customer-centric mindset.
+11.	With relevant HR partners, coordinates hiring of new Team Members.
+12.	Selects and manages technical vendors/suppliers, where appropriate	•	Collaborate with SMs, to help remove organization blockers/distractions (Prioritization, dependencies on teams across other department/company).
+•	Partners closely with P&P Sr. Managers/Directors
+•	Partner with Architecture to foster and encourage technology decision making within the teams. Ensure architecture convergence across all the UM Platforms and services.
+•	Partner with business stakeholders to assess/articulate/drive value stream. (Partner with Engineering Managers access if teams are contributing to the most value work. #ValueDelivery)
+•	Work with IT Service Excellence to ensure they are up-to speed with runbooks on a regular basis for L-1 Support and build strategy for L-2 Support. (M vs sr.M - tactical vs Prioritization)
+•	Help establish NFR for the solution. (quality standards - update across multiple roles)	CTPO & Engineering Manager Partnership!
+CTPO - Manage POs, EMs - Manage Devs
+•	Collaborate with CTPOs, BPO and TPOs to define the product vision and technical roadmap
+•	Improve estimation by working with SMEs and SA’s during intake discovery to access capacity and people/skill needs.
+Engineering Leader will partner with IT Staff Engineers, SAs regarding technical excellence and choices.
+Engineering Managers roles/responsibilities in IRIS (Career Architecture)
+Information Technology - App Development - Iris (cigna.com) Information Technology - IT Engineering - Iris (cigna.com) Process Improvement - Agile - Iris (cigna.com)
+ 
+•	Sr. Manager have a Technology Roadmap for the Enterprise (Drive the strategy)
+•	CPTO → pull from the high level (^^) and focus on the product
+•	PTO → pull from the high level and collaborate with CTPO to prioritize work
+Engineering Leads 	•	Technical SME for the product
+o	Business/Workflows/Domain SME for the product
+o	Prior Auth end-to-end workflow awareness
+•	Product Road-mapping and T-shirt sizing assistance to CTPO/PO.
+•	Assists with decision-making when needed for product scrum teams. Not as a dependency nor a decision-maker.
+•	Engages in 7211, if teams need help. Not First responder to 7211.
+•	Ensure team ‘dependency' isn’t created on SME.
+•	Does not actively work on a team backlog.
+•	Participate in PI planning as product SME.
+•	Collaborate with IT Principal and Engineering leaders toward building the future of the Product/Experience.
+•	Cross team/product/company technical questions, go to the IT SME. IT SME will engage with other product teams if required.
+•	Collaborates with CTPOs, IT Principal and Engineering Leaders under a specific experience/ product.
+•	Interacts with IT Principal for best practices guardrails, application architecture.
+•	Works with IT Principals to help drive execution of technical strategy across product teams.	 	Works with IT Principals to help drive execution of technical strategy across product teams.
+Dev Engineer	•	Provides advanced professional input to complex Development assignments/projects.
+•	Strong understanding of available technology and is a recognized subject matter expert in a single technical area. (Sr.Dev)
+•	Devises or modifies procedures to solve highly complex problems considering computer equipment capacity and limitations, operating time, and form of desired results.
+•	Designs, codes, tests, debugs, and documents those programs.
+•	Works autonomously, only requiring “expert” level technical support from others.
+•	Exercises judgment in the evaluation, selection, and adaptation of both standard and complex techniques and procedures.
+•	Utilizes in-depth professional knowledge and acumen to develop models and procedures, and monitor trends, within eP Engineering.
+•	Ability to recommend and lead solutioning with a firm grasp on design disciplines and architectural patterns and aligning and influencing the team in following them. (Sr.Dev)
+•	Engaged in mentoring and growing junior engineers within the team (Sr.Dev)	 	Member of a scrum team
+QA Engineer	•	The QA team member should actively participate in all team ceremonies, including refinement, Sprint planning, Sprint Demo, and Retrospective.
+•	Embracing Shift Left Testing is crucial. This entails integrating testing throughout the development process rather than treating it as a separate phase. 
+•	Their involvement in contributing to the Acceptance Criteria (AC) within user stories is essential for alignment.
+•	Story sizing must encompass QA effort/capacity for signoff.
+Collaboration between QA testers, Devs, and PO is vital to ensure the construction of quality. While Devs focus on design/development/unit testing, QAs concentrate on test design/test scenarios and test case development/readiness for functional testing.
+•	Upon completion of Unit Testing by Devs, QAs should commence functional testing while logging any defects and monitoring them until closure before providing final signoff.
+•	After the cutoff date, QAs will contribute to release-level regression testing. Furthermore, dedicating time for planned UCX Automation test scripting is an essential expectation from the QA team.
+•	The main objective of QA Engineers is to prioritize testing automation.	 	Member of a scrum team
+				
+ 
+
+
+Thanks and Regards
+Siraj
+

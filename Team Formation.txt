@@ -1,0 +1,164 @@
+Extensive task list pertaining to a user story: 
+
+Spike Story  is just Pre-Sprint Analysis story for DEV-PO on requirement understanding 
+
+BA – Tag would have the Start Date of Refinement (this is already being done) 
+
+BA Tasks needs to be added 
+
+BA – Self Refinement Efforts 
+
+BA – Team (internal) Refinement Efforts 
+
+BA – Requestor Refinement/Coordination/Query resolution Efforts 
+
+BA – Artifact/Document (FRD, Triaging etc..) creation Efforts (attached to ADO) 
+
+  
+
+Dev - Analysis Efforts (ImpAnalysis, Design, UT planning, How to test, +ve/-ve Test cases, How to test end-to-end) 
+Dev - Analysis Review Efforts (ImpAnalysis, Design, UT steps) 
+Dev - Development Efforts (Code & DB) 
+Dev - Development Review Efforts (Code & DB) 
+Dev - Unit Testing Efforts 
+Dev - Deployment Efforts 
+Dev - Documentation Efforts 
+Dev - Show & Tell (Demo) Efforts 
+Dev – Tracker Coordination Efforts 
+ 
+QA - Analysis Efforts (ImpAnalysis, Plan Testing for +ve/-ve Test cases, env. readiness for testing, How to test end-to-end) 
+QA - Analysis Review Efforts (ImpAnalysis, Plan Testing) 
+QA - Scenarios Creation Efforts 
+QA - Test Cases Creation Efforts (+ve/-ve Cases) 
+QA - Test Scenarios & Cases Review Efforts (+ve/-ve Cases) 
+QA – Automation Code Development Efforts (new/modified) 
+QA – Automation Code Review Efforts 
+QA – Automation Code Execution Efforts QA - Test Execution Efforts - QA 
+QA - Test Execution Efforts - STG 
+QA - Test Execution Efforts - UAT 
+QA - Show & Tell (Demo) Effort QA – Tracker Coordination Efforts 
+
+
+
+  
+
+Story points 
+
+1 
+
+2 
+
+3 
+
+5 
+
+8 
+
+13 
+
+Total Minimum hours at story level 
+
+1 
+
+13 
+
+21 
+
+36 
+
+46 
+
+>71 
+
+Total Maximum hours at story level 
+
+12 
+
+20 
+
+35 
+
+45 
+
+70 
+
+< 80 
+
+
+Thanks and Regards
+Siraj
+
+From: R, Sirajudeen (CTR) 
+Sent: Monday, September 2, 2024 12:57 PM
+To: R, Sirajudeen (CTR) <sirajudeen.r@evicore.com>
+Subject: NTeam
+
+Team DL Creation
+ADO Team creation
+ADO Area path alignment., Iteration refinement/creation
+ADO Team backlog creation
+Exit check list from other team for new members
+Access Status
+Training Status
+Team Readiness
+Team member strength and weekness identified
+Set specialization target for team memebers
+
+Dev Group          QA Group            PO-SM-M            Onsh
+                                                
+                                
+
+Get clear with the ask /requirement
+Sprint Planning  - Estimation and Task splitting on story
+Task creation importance with title
+Sprint Retrospective
+PI-Product increament tagging,other tagging
+QMS Work Review
+Performance review cycle
+Readymade data for case creation to UCX -Full flow for 1 paypor
+Small, testable, valuable should be a story with in a sprint
+Lot of agile ceremonies -say doneforyesterday and activeitemfortoday and pass on 
+Acceptance criteria is reqired for taking up the work
+Set expections on team members and get their expectations and aspirations and guide them on preparation
+Strict to the main point on daily standup meeting , Detailing and solutioning should happen offline with individual
+Anlayze the functionality and what are the repos which we have to make change and dependent repos and topics on the user story as the first step and get PO review and SME review on the proposed changes as part of analysis 
+Focus time on Team standup -  Peer review, Dev-Test Help , PO-Connect for Backlog
+
+Accept the story only in Ready to work state from PO
+Do the estimate for the story
+
+Nurture meaning of Proud and core value of CT
+
+Build the ability/capability in the application to perform a partcilau feature..This is based on the ask
+
+Create Product backlog-todo>refinement PO+Dev team-ready to work mark ready to work only if ready to work with all queries cleared,identify dependencies, high level design workflow verify with repo owning team bring in a call ,repos,techical and functional refinement,identify resources that need access and estimate request followup efforts>sprint planning(team)-tasking and estimation,>dev work>po sign off>deployment>retrospective
+
+Take screenshot in IN verification-must
+
+Tell PO in advance that need time for PR review with repo owner team so that time will be set
+
+Advice from sagar- approach from ask perspective and analyze not entire repo in beginning.Get clarified with refinement , depnecies,design . Other wise you will stuck up at later point on ask if focussing on all
+
+Enhance domain knowledge , end goal is business value addition, understand how its helpful, get background of problem statement.Come prepared in this way for PO sign off, you can have queries with PO if you need.Similarly have to demo actual stakeholders for working feature.Leads have to take care of this with associated dev on the feature to ensure taken care properly.
+
+Release note- build number with pipeline lin. Summary of change of repo, PR.Follow Raja template for release note
+
+Test case coverage >80% should be ensured
+
+Coordinate with repo owner team SPOC for deployment and give support for post prod verification. Utilize app insights for verification independenntly
+
+DEV also should do complete integration testing in agile
+
+Update confluenec page with release details with CR as well
+
+Set Clean boundaries and expectations with management , Delivery Lead and Architects. They should not behave in embarrassing manner, it should be professional and polite on any work or urgency or priority
+
+Be descriptive in update on feature/ user story updates, Don’t plainly say Dev completed if unit testing is not done. Dev completion includes coding and unit testing
+
+Not overthinking on the change - need to be inline with Design and architecture of the system , so as to get the approval
+
+5 Sprints 1 PI
+
+Thanks and Regards
+Siraj
+

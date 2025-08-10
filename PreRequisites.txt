@@ -1,0 +1,17 @@
+List
+=====
+LMS Training
+DB Access - Drive to closure today
+App Setup
+Spike story Analysis 
+DOC for IO
+DOC for CW
+DOC for Tools
+Any Workflow Diag from IO Teams
+Training videos and Basic overview from IO Team
+
+Queries
+=======
+Branching strategy
+PR Approval Process
+Estimation as a Dev Team VS Target

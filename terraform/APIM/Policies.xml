@@ -1,0 +1,216 @@
+<!--
+    - Policies are applied in the order they appear.
+    - Position <base/> inside a section to inherit policies from the outer scope.
+    - Comments within policies are not preserved.
+-->
+<!-- Add policies as children to the <inbound>, <outbound>, <backend>, and <on-error> elements -->
+<policies>
+    <!-- Throttle, authorize, validate, cache, or transform the requests -->
+    <inbound>
+        <base />
+    </inbound>
+    <!-- Control if and how the requests are forwarded to services  -->
+    <backend>
+        <base />
+    </backend>
+    <!-- Customize the responses -->
+    <outbound>
+        <base />
+    </outbound>
+    <!-- Handle exceptions and customize error responses  -->
+    <on-error>
+        <base />
+    </on-error>
+</policies>
+
+<policies>
+    <inbound>
+        <base />
+        <validate-jwt header-name="Authorization" failed-validation-httpcode="403" failed-validation-error-message="Forbidden Access" require-scheme="Bearer">
+            <openid-config url="https://evicorein1b2c.b2clogin.com/evicorein1b2c.onmicrosoft.com/B2C_1A_UCX_SUSI/v2.0/.well-known/openid-configuration" />
+            <required-claims>
+                <claim name="groups" match="any">
+                    <value>in1_EpSleepMedicalDirector</value>
+                </claim>
+            </required-claims>
+        </validate-jwt>
+        <rewrite-uri template="/api/v2/memberhistory/{id}" />
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>
+
+
+authorizationService = {
+  baseUri                = "https://in1api.evicore.com/pac/authorizations"
+  ocpApimSubscriptionKey = "924ededaae5a4e60aaff194ebf1eb970"
+}
+
+requestForServiceService = {
+  baseUri                = "https://in1api.innovate.lan/ucx/requestforservices/api"
+  ocpApimSubscriptionKey = "577025c89bbc4aeca21f8a1fe329b67a"
+}
+
+<policies>
+    <inbound>
+        <base />
+        <validate-jwt header-name="Authorization" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized. Access token is missing or invalid.">
+            <openid-config url="https://evicorein1b2c.b2clogin.com/evicorein1b2c.onmicrosoft.com/B2C_1A_UCX_SUSI/v2.0/.well-known/openid-configuration" />
+            <openid-config url="https://evicorein1b2c.b2clogin.com/evicorein1b2c.onmicrosoft.com/B2C_1A_EpSISLI/v2.0/.well-known/openid-configuration" />
+            <required-claims>
+                <claim name="groups" match="any">
+                    <value>in1_EpSleepMedicalDirector</value>
+                    <value>in1_EpSleepNurse</value>
+                    <value>in1_EpFertilityAdvisor</value>
+                    <value>in1_EpPacMedicalDirector</value>
+                </claim>
+            </required-claims>
+        </validate-jwt>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>
+
+
+<policies>
+    <inbound>
+        <base />
+        <cors>
+            <allowed-origins>
+                <origin>*</origin>
+            </allowed-origins>
+            <allowed-methods>
+                <method>*</method>
+            </allowed-methods>
+            <allowed-headers>
+                <header>*</header>
+            </allowed-headers>
+            <expose-headers>
+                <header>*</header>
+            </expose-headers>
+        </cors>
+        <validate-jwt header-name="Authorization" failed-validation-httpcode="401" failed-validation-error-message="Your Access token is missing, invalid or expired for accessing erss.transformationrulesapi.read service.">
+            <openid-config url="https://login.microsoftonline.com/fbb4ca8e-bc0a-493a-8bc3-6ac01f6121f2/v2.0/.well-known/openid-configuration" />
+            <audiences>
+                <audience>059d3f53-5dd1-4d3f-a304-ef57aa5366be</audience>
+            </audiences>
+            <required-claims>
+                <claim name="roles">
+                    <value>erss.transformationrulesapi.read</value>
+                </claim>
+            </required-claims>
+        </validate-jwt>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>
+
+
+operation_policy.xml.tpl
+<policies>
+    <inbound>
+        <base />
+        <validate-jwt header-name="Authorization" failed-validation-httpcode="403" failed-validation-error-message="Forbidden Access" require-scheme="Bearer">
+            %{ for url in authorization_urls ~}
+                <openid-config url="${url}" />
+            %{ endfor ~}
+
+            <required-claims>
+                <claim name="groups" match="any">
+                %{ for claim in claims ~}
+                <value>${claim}</value>
+                %{ endfor ~}
+                </claim>
+            </required-claims>
+        </validate-jwt>
+        <rewrite-uri template="${template_url}" />
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>
+
+
+
+<policies>
+    <inbound>
+        <base />
+        <validate-jwt header-name="Authorization" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized. Access token is missing or invalid.">
+            <openid-config url="https://evicorepd1b2c.b2clogin.com/evicorepd1b2c.onmicrosoft.com/B2C_1A_UCX_SUSI/v2.0/.well-known/openid-configuration" />
+            <openid-config url="https://evicorepd1b2c.b2clogin.com/evicorepd1b2c.onmicrosoft.com/B2C_1A_EpSISLI/v2.0/.well-known/openid-configuration" />
+            <required-claims>
+                <claim name="groups" match="any">
+                    <value>pd1_EpSleepMedicalDirector</value>
+                    <value>pd1_epsleepnurse</value>
+                    <value>pd1_ucx_md</value>
+                </claim>
+            </required-claims>
+        </validate-jwt>
+        <cors>
+            <allowed-origins>
+                <origin>*</origin>
+            </allowed-origins>
+            <allowed-methods>
+                <method>*</method>
+            </allowed-methods>
+            <allowed-headers>
+                <header>*</header>
+            </allowed-headers>
+            <expose-headers>
+                <header>*</header>
+            </expose-headers>
+        </cors>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+        <set-header name="Strict-Transport-Security" exists-action="override">
+            <value>max-age=31536000;includeSubDomains; preload</value>
+        </set-header>
+        <set-header name="X-XSS-Protection" exists-action="override">
+            <value>1; mode=block</value>
+        </set-header>
+        <set-header name="Content-Security-Policy" exists-action="override">
+            <value>default-src 'self'</value>
+        </set-header>
+        <set-header name="X-Frame-Options" exists-action="override">
+            <value>deny</value>
+        </set-header>
+        <set-header name="X-Content-Type-Options" exists-action="override">
+            <value>nosniff</value>
+        </set-header>
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>
+
